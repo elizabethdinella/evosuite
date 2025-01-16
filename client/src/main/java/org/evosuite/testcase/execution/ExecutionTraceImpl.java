@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.evosuite.Properties;
 import org.evosuite.TestGenerationContext;
@@ -96,6 +97,17 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 		}
 	}
 
+
+	public class Distance {
+		public Double distance;
+		public String originMethod;
+
+		public Distance(double dist, String m) {
+			this.distance = dist;
+			this.originMethod = m;
+		}
+	}
+
 	private static final Logger logger = LoggerFactory.getLogger(ExecutionTrace.class);
 
 	/** Constant <code>traceCalls=false</code> */
@@ -107,9 +119,15 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 	public static boolean traceCoverage = true;
 
 	private static void checkSaneCall(MethodCall call) {
-		if (!((call.trueDistanceTrace.size() == call.falseDistanceTrace.size())
-				&& (call.falseDistanceTrace.size() == call.defuseCounterTrace.size())
-				&& (call.defuseCounterTrace.size() == call.branchTrace.size()))) {
+		long trueCount = call.branchTraces.stream().map(elem -> elem.trueDistance).filter(dist -> dist != null).count();
+		long falseCount = call.branchTraces.stream().map(elem -> elem.falseDistance).filter(dist -> dist != null).count();
+
+
+		if (!(//(call.trueDistanceTrace.size() == call.falseDistanceTrace.size())
+				//&& (call.falseDistanceTrace.size() == call.defuseCounterTrace.size())
+				trueCount == falseCount
+				&& falseCount == call.defuseCounterTrace.size()
+				&& (call.defuseCounterTrace.size() == call.branchTraces.size()))) {
 			throw new IllegalStateException("insane MethodCall: traces should all be of equal size. " + call.explain());
 		}
 
@@ -181,10 +199,16 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 		Collections.sort(removableIndices);
 		for (int i = removableIndices.size() - 1; i >= 0; i--) {
 			int removableIndex = removableIndices.get(i);
-			Integer removedBranch = call.branchTrace.remove(removableIndex);
-			Double removedTrue = call.trueDistanceTrace.remove(removableIndex);
-			Double removedFalse = call.falseDistanceTrace.remove(removableIndex);
+
+			BranchTrace removedBranchTrace = call.branchTraces.remove(removableIndex);
+
+			Integer removedBranch = removedBranchTrace.branchId;
+			Double removedTrue = removedBranchTrace.trueDistance;
+			Double removedFalse = removedBranchTrace.falseDistance;
+
 			Integer removedCounter = call.defuseCounterTrace.remove(removableIndex);
+
+
 			if ((removedCounter == null) || (removedBranch == null) || (removedTrue == null)
 					|| (removedFalse == null)) {
 				throw new IllegalStateException("trace.finished_calls-traces not allowed to contain null");
@@ -227,7 +251,7 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 	// The last explicitly thrown exception is kept here
 	private Throwable explicitException = null;
 
-	public Map<Integer, Double> falseDistances = Collections.synchronizedMap(new HashMap<>());
+	public Map<Integer, Distance> falseDistances = Collections.synchronizedMap(new HashMap<>());
 	private final Map<Integer, Double> falseDistancesSum = Collections.synchronizedMap(new HashMap<>());
 	// finished_calls;
 	public List<MethodCall> finishedCalls = Collections.synchronizedList(new ArrayList<>());
@@ -260,7 +284,7 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 
 	public Set<Integer> touchedMutants = Collections.synchronizedSet(new HashSet<>());
 
-	public Map<Integer, Double> trueDistances = Collections.synchronizedMap(new HashMap<>());
+	public Map<Integer, Distance> trueDistances = Collections.synchronizedMap(new HashMap<>());
 
 	private final Map<Integer, Double> trueDistancesSum = Collections.synchronizedMap(new HashMap<>());
 
@@ -452,14 +476,14 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 		}
 
 		if (!trueDistances.containsKey(branch))
-			trueDistances.put(branch, true_distance);
+			trueDistances.put(branch, new Distance(true_distance, stack.get(stack.size()-2).methodName));
 		else
-			trueDistances.put(branch, Math.min(trueDistances.get(branch), true_distance));
+			trueDistances.put(branch, new Distance(Math.min(trueDistances.get(branch).distance, true_distance), stack.get(stack.size()-2).methodName));
 
 		if (!falseDistances.containsKey(branch))
-			falseDistances.put(branch, false_distance);
+			falseDistances.put(branch, new Distance(false_distance, stack.get(stack.size()-2).methodName));
 		else
-			falseDistances.put(branch, Math.min(falseDistances.get(branch), false_distance));
+			falseDistances.put(branch, new Distance(Math.min(falseDistances.get(branch).distance, false_distance), stack.get(stack.size()-2).methodName));
 
 		if (!trueDistancesSum.containsKey(branch))
 			trueDistancesSum.put(branch, true_distance);
@@ -717,9 +741,13 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 			if (traceCalls) {
 				if (ArrayUtil.contains(Properties.CRITERION, Criterion.DEFUSE)
 						|| ArrayUtil.contains(Properties.CRITERION, Criterion.ALLDEFS)) {
-					call.branchTrace.add(-1);
-					call.trueDistanceTrace.add(1.0);
-					call.falseDistanceTrace.add(0.0);
+
+					int branchId = -1;
+					double trueDist = 1.0;
+					double falseDist = 0.0;
+					String originMethod = stack.get(stack.size()-2).methodName;
+					call.branchTraces.add(new BranchTrace(-1, originMethod, trueDist, falseDist));
+					
 					call.defuseCounterTrace.add(duCounter);
 					// TODO line_trace ?
 				}
@@ -810,7 +838,7 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 			// if(traceCalls) {
 				if (!stack.isEmpty() && !(stack.peek().methodName.equals(methodname))) {
 					// Handle cases where unexpected calls are on the stack
-					if (stack.peek().methodName.isEmpty() && !stack.peek().branchTrace.isEmpty()) {
+					if (stack.peek().methodName.isEmpty() && !stack.peek().branchTraces.isEmpty()) {
 						finishedCalls.add(stack.pop());
 					} else {
 						// Usually, this happens if we use mutation testing and
@@ -860,8 +888,14 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 	@Override
 	public Set<Integer> getCoveredFalseBranches() {
 		Set<Integer> covered = new HashSet<>();
-		for (Entry<Integer, Double> entry : falseDistances.entrySet()) {
-			if (entry.getValue() == 0.0)
+		for (Entry<Integer, Distance> entry : falseDistances.entrySet()) {
+			logger.error(Properties.TARGET_METHOD + " " + entry.getValue().originMethod + " " + String.valueOf(!Properties.TARGET_METHOD.isEmpty() && !entry.getValue().originMethod.equals(Properties.TARGET_METHOD)));
+
+			if (!Properties.TARGET_METHOD.isEmpty() && !entry.getValue().originMethod.equals(Properties.TARGET_METHOD)) {
+				continue;
+			}
+
+			if (entry.getValue().distance == 0.0)
 				covered.add(entry.getKey());
 		}
 
@@ -941,11 +975,18 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 	@Override
 	public Set<Integer> getCoveredTrueBranches() {
 		Set<Integer> covered = new HashSet<>();
-		for (Entry<Integer, Double> entry : trueDistances.entrySet()) {
-			if (entry.getValue() == 0.0)
+
+		for (Entry<Integer, Distance> entry : trueDistances.entrySet()) {
+			logger.error(Properties.TARGET_METHOD + " " + entry.getValue().originMethod + " " + String.valueOf(!Properties.TARGET_METHOD.isEmpty() && !entry.getValue().originMethod.equals(Properties.TARGET_METHOD)));
+			if (!Properties.TARGET_METHOD.isEmpty() && !entry.getValue().originMethod.equals(Properties.TARGET_METHOD)) {
+				continue;
+			}
+
+			if (entry.getValue().distance == 0.0)
 				covered.add(entry.getKey());
 		}
 
+		logger.error("Covered a total of " + covered.size() + " true branches");
 		return covered;
 	}
 
@@ -998,7 +1039,7 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 	/** {@inheritDoc} */
 	@Override
 	public double getFalseDistance(int branchId) {
-		return falseDistances.get(branchId);
+		return falseDistances.get(branchId).distance;
 	}
 
 	/*
@@ -1009,7 +1050,12 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 	/** {@inheritDoc} */
 	@Override
 	public Map<Integer, Double> getFalseDistances() {
-		return falseDistances;
+		return falseDistances.entrySet()
+            .stream()
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,              
+                entry -> entry.getValue().distance  
+            ));
 	}
 
 	/*
@@ -1232,7 +1278,7 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 			ArrayList<Integer> removableIndices = new ArrayList<>();
 			for (int i = 0; i < call.defuseCounterTrace.size(); i++) {
 				int currentDUCounter = call.defuseCounterTrace.get(i);
-				int currentBranchBytecode = call.branchTrace.get(i);
+				int currentBranchBytecode = call.branchTraces.get(i).branchId;
 
 				if (currentDUCounter < duCounterStart || currentDUCounter > duCounterEnd)
 					removableIndices.add(i);
@@ -1241,10 +1287,10 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 					// targetDU
 					boolean targetExpressionValue = targetDU.getControlDependentBranchExpressionValue();
 					if (targetExpressionValue) {
-						if (call.trueDistanceTrace.get(i) == 0.0)
+						if (call.branchTraces.get(i).trueDistance == 0.0)
 							removableIndices.add(i);
 					} else {
-						if (call.falseDistanceTrace.get(i) == 0.0)
+						if (call.branchTraces.get(i).falseDistance == 0.0)
 							removableIndices.add(i);
 					}
 
@@ -1266,7 +1312,7 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 	/** {@inheritDoc} */
 	@Override
 	public double getTrueDistance(int branchId) {
-		return trueDistances.get(branchId);
+		return trueDistances.get(branchId).distance;
 	}
 
 	/*
@@ -1277,7 +1323,12 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 	/** {@inheritDoc} */
 	@Override
 	public Map<Integer, Double> getTrueDistances() {
-		return trueDistances;
+		return trueDistances.entrySet()
+		.stream()
+		.collect(Collectors.toMap(
+			Map.Entry::getKey,              
+			entry -> entry.getValue().distance 
+		));
 	}
 
 	/*
@@ -1583,12 +1634,12 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 			ret.append(entry.getKey() + ": " + entry.getValue() + ", ");
 		}
 		ret.append("\nTrue distances: ");
-		for (Entry<Integer, Double> entry : trueDistances.entrySet()) {
-			ret.append(entry.getKey() + ": " + entry.getValue() + ", ");
+		for (Entry<Integer, Distance> entry : trueDistances.entrySet()) {
+			ret.append(entry.getKey() + ": " + entry.getValue().distance + ", ");
 		}
 		ret.append("\nFalse distances: ");
-		for (Entry<Integer, Double> entry : falseDistances.entrySet()) {
-			ret.append(entry.getKey() + ": " + entry.getValue() + ", ");
+		for (Entry<Integer, Distance> entry : falseDistances.entrySet()) {
+			ret.append(entry.getKey() + ": " + entry.getValue().distance + ", ");
 		}
 		return ret.toString();
 	}
@@ -1602,9 +1653,13 @@ public class ExecutionTraceImpl implements ExecutionTrace, Cloneable {
 			if (stack.isEmpty()) {
 				return;
 			}
-			stack.peek().branchTrace.add(branch); // was: bytecode_id
-			stack.peek().trueDistanceTrace.add(true_distance);
-			stack.peek().falseDistanceTrace.add(false_distance);
+
+			String originMethod = stack.get(stack.size()-2).methodName;
+			BranchTrace branchTrace = new BranchTrace(branch, originMethod, true_distance, false_distance);
+
+			stack.peek().branchTraces.add(branchTrace); // was: bytecode_id
+			//stack.peek().trueDistanceTrace.add(true_distance);
+			//stack.peek().falseDistanceTrace.add(false_distance);
 			assert ((true_distance == 0.0) || (false_distance == 0.0));
 			// TODO line_trace ?
 			if (ArrayUtil.contains(Properties.CRITERION, Criterion.DEFUSE)

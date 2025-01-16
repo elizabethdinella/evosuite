@@ -26,13 +26,15 @@ package org.evosuite.testcase.execution;
 
 import java.util.ArrayList;
 import java.util.List;
+
 public class MethodCall implements Cloneable {
 	public String className;
 	public String methodName;
 	public List<Integer> lineTrace;
-	public List<Integer> branchTrace;
-	public List<Double> trueDistanceTrace;
-	public List<Double> falseDistanceTrace;
+	public List<BranchTrace> branchTraces;
+	//public List<Integer> branchTrace;
+	//public List<Double> trueDistanceTrace;
+	//public List<Double> falseDistanceTrace;
 	public List<Integer> defuseCounterTrace;
 	public int methodId;
 	public int callingObjectID;
@@ -52,9 +54,9 @@ public class MethodCall implements Cloneable {
 		this.className = className;
 		this.methodName = methodName;
 		lineTrace = new ArrayList<>();
-		branchTrace = new ArrayList<>();
-		trueDistanceTrace = new ArrayList<>();
-		falseDistanceTrace = new ArrayList<>();
+		branchTraces = new ArrayList<>();
+		//trueDistanceTrace = new ArrayList<>();
+		//falseDistanceTrace = new ArrayList<>();
 		defuseCounterTrace = new ArrayList<>();
 		this.methodId = methodId;
 		this.callingObjectID = callingObjectID;
@@ -75,17 +77,18 @@ public class MethodCall implements Cloneable {
 		// }
 		// ret.append("\n");
 		ret.append("Branches: ");
-		for (Integer branch : branchTrace) {
-			ret.append(" " + branch);
+		for (BranchTrace branch : branchTraces) {
+			ret.append(" " + branch.branchId);
+			
 		}
 		ret.append("\n");
 		ret.append("True Distances: ");
-		for (Double distance : trueDistanceTrace) {
-			ret.append(" " + distance);
+		for (BranchTrace branch : branchTraces) {
+			ret.append(" " + branch.trueDistance);
 		}
 		ret.append("\nFalse Distances: ");
-		for (Double distance : falseDistanceTrace) {
-			ret.append(" " + distance);
+		for (BranchTrace branch : branchTraces) {
+			ret.append(" " + branch.falseDistance);
 		}
 		ret.append("\n");
 		return ret.toString();
@@ -113,29 +116,29 @@ public class MethodCall implements Cloneable {
 			r.append("\n");
 		}
 		r.append("Branches: ");
-		if (branchTrace == null) {
+		if (branchTraces == null) {
 			r.append("null");
 		} else {
-			for (Integer branch : branchTrace) {
-				r.append("\t" + branch);
+			for (BranchTrace branch : branchTraces) {
+				r.append("\t" + branch.branchId);
 			}
 			r.append("\n");
 		}
 		r.append("True Distances: ");
-		if (trueDistanceTrace == null) {
+		if (branchTraces == null) {
 			r.append("null");
 		} else {
-			for (Double distance : trueDistanceTrace) {
-				r.append("\t" + distance);
+			for (BranchTrace branch : branchTraces) {
+				r.append("\t" + branch.trueDistance);
 			}
 			r.append("\n");
 		}
 		r.append("False Distances: ");
-		if (falseDistanceTrace == null) {
+		if (branchTraces == null) {
 			r.append("null");
 		} else {
-			for (Double distance : falseDistanceTrace) {
-				r.append("\t" + distance);
+			for (BranchTrace branch : branchTraces) {
+				r.append("\t" + branch.falseDistance);
 			}
 			r.append("\n");
 		}
@@ -157,9 +160,7 @@ public class MethodCall implements Cloneable {
 		MethodCall copy = new MethodCall(className, methodName, methodId,
 		        callingObjectID, callDepth);
 		copy.lineTrace = new ArrayList<>(lineTrace);
-		copy.branchTrace = new ArrayList<>(branchTrace);
-		copy.trueDistanceTrace = new ArrayList<>(trueDistanceTrace);
-		copy.falseDistanceTrace = new ArrayList<>(falseDistanceTrace);
+		copy.branchTraces = new ArrayList<>(branchTraces);
 		copy.defuseCounterTrace = new ArrayList<>(defuseCounterTrace);
 		return copy;
 	}

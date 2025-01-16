@@ -311,10 +311,12 @@ public class TestUsageChecker {
 
         final MethodNameMatcher matcher = new MethodNameMatcher();
         String methodSignature = m.getName() + Type.getMethodDescriptor(m);
-        if (!matcher.methodMatches(methodSignature)) {
+
+        //include non matching methods in the pool
+        /*if (!matcher.methodMatches(methodSignature)) {
             logger.debug("Excluding method '" + methodSignature + "' that does not match criteria");
             return false;
-        }
+        }*/
 
         if (m.isBridge()) {
             logger.debug("Excluding bridge method: " + m.toString());

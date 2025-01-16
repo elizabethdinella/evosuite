@@ -27,6 +27,7 @@ import org.evosuite.testcase.TestChromosome;
 import org.evosuite.testcase.TestFitnessFunction;
 import org.evosuite.testcase.execution.ExecutionResult;
 import org.evosuite.testcase.execution.MethodCall;
+import org.evosuite.testcase.execution.BranchTrace;
 import org.evosuite.utils.ArrayUtil;
 
 import java.util.Objects;
@@ -127,12 +128,12 @@ public class BranchCoverageTestFitness extends TestFitnessFunction {
 			        && call.methodName.equals(goal.getMethodName())) {
 				methodExecuted = true;
 				if (goal.getBranch() != null) {
-					for (int i = 0; i < call.branchTrace.size(); i++) {
-						if (call.branchTrace.get(i) == goal.getBranch().getInstruction().getInstructionId()) {
+					for (BranchTrace branchTrace : call.branchTraces) {
+						if (branchTrace.branchId == goal.getBranch().getInstruction().getInstructionId()) {
 							if (goal.getValue())
-								sum += call.falseDistanceTrace.get(i);
+								sum += branchTrace.falseDistance;
 							else
-								sum += call.trueDistanceTrace.get(i);
+								sum += branchTrace.trueDistance;
 						}
 					}
 				}
@@ -158,7 +159,10 @@ public class BranchCoverageTestFitness extends TestFitnessFunction {
 	 */
 	@Override
 	public double getFitness(TestChromosome individual, ExecutionResult result) {
+		logger.error("Getting distance for test: " + individual.toString());
 		ControlFlowDistance distance = goal.getDistance(result);
+
+		logger.error("Distance for goal: " + goal.toString() + " for test: " + individual.toString() + " is " + String.valueOf(distance.getResultingBranchFitness()));
 
 		double fitness = distance.getResultingBranchFitness();
 

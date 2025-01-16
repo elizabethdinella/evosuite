@@ -34,6 +34,8 @@ import org.evosuite.graphs.cfg.BytecodeInstruction;
 import org.evosuite.testcase.execution.ExecutionResult;
 import org.evosuite.testcase.execution.ExecutionTrace;
 import org.evosuite.testcase.execution.MethodCall;
+import org.evosuite.testcase.execution.BranchTrace;
+
 
 /**
  * 
@@ -386,11 +388,12 @@ public abstract class DefUseExecutionTraceAnalyzer {
 		for (MethodCall call : trace.getMethodCalls()) {
 			System.out.println("Found MethodCall for: " + call.methodName + " on object "
 			        + call.callingObjectID);
-			System.out.println("#passed branches: " + call.branchTrace.size());
+			System.out.println("#passed branches: " + call.branchTraces.size());
 			for (int i = 0; i < call.defuseCounterTrace.size(); i++) {
-				System.out.println(i + ". at Branch " + call.branchTrace.get(i)
-				        + " true_dist: " + call.trueDistanceTrace.get(i)
-				        + " false_dist: " + call.falseDistanceTrace.get(i)
+				BranchTrace branchTrace = call.branchTraces.get(i);
+				System.out.println(i + ". at Branch " + branchTrace.branchId
+				        + " true_dist: " + branchTrace.trueDistance
+				        + " false_dist: " + branchTrace.falseDistance
 				        + " duCounter: " + call.defuseCounterTrace.get(i));
 				System.out.println();
 			}

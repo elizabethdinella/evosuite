@@ -19,13 +19,18 @@
  */
 package org.evosuite.coverage.branch;
 
-import java.util.*;
+import java.util.Set;
+import java.util.List;
+import java.util.HashSet;
+import java.util.Collections;
 
+import org.evosuite.Properties;
 import org.evosuite.coverage.ControlFlowDistance;
 import org.evosuite.coverage.TestCoverageGoal;
 import org.evosuite.graphs.cfg.BytecodeInstruction;
 import org.evosuite.graphs.cfg.ControlDependency;
 import org.evosuite.testcase.statements.Statement;
+import org.evosuite.testcase.execution.BranchTrace;
 import org.evosuite.testcase.execution.ExecutionResult;
 import org.evosuite.testcase.execution.MethodCall;
 import org.evosuite.testcase.statements.ConstructorStatement;
@@ -117,13 +122,18 @@ public class ControlFlowDistanceCalculator {
 		if (branch == null)
 			return getRootDistance(result, className, methodName);
 
+		//logger.error("Calculating control flow distance ");
+
+			
 		if(value) {
-			if (result.getTrace().getCoveredTrueBranches().contains(branch.getActualBranchId()))
+			if (result.getTrace().getCoveredTrueBranches().contains(branch.getActualBranchId())) {
 				return new ControlFlowDistance(0, 0.0);
+			}
 		}
 		else {
-			if (result.getTrace().getCoveredFalseBranches().contains(branch.getActualBranchId()))
+			if (result.getTrace().getCoveredFalseBranches().contains(branch.getActualBranchId())) {
                 return new ControlFlowDistance(0, 0.0);
+			}
 		}
 
 		ControlFlowDistance nonRootDistance = getNonRootDistance(result, branch, value);
@@ -203,6 +213,9 @@ public class ControlFlowDistanceCalculator {
 	private static ControlFlowDistance getNonRootDistance(ExecutionResult result,
 	        Branch branch, boolean value) {
 
+
+		//logger.error("Did not cover the branch. Calculating the distance..");
+
 		if (branch == null)
 			throw new IllegalStateException(
 			        "expect this method only to be called if this goal does not try to cover the root branch");
@@ -219,6 +232,7 @@ public class ControlFlowDistanceCalculator {
 				ControlFlowDistance d2;
 				Set<Branch> handled = new HashSet<>();
 				//				result.intermediateDistances = new HashMap<Branch,ControlFlowDistance>();
+				//logger.error("Calling the helper getNonRootDistance");
 				d2 = getNonRootDistance(result, call, branch, value, className,
 				                        methodName, handled);
 				if (d2.compareTo(r) < 0) {
@@ -251,8 +265,6 @@ public class ControlFlowDistanceCalculator {
 		}
 		handled.add(branch);
 
-		List<Double> trueDistances = call.trueDistanceTrace;
-		List<Double> falseDistances = call.falseDistanceTrace;
 
 		// IDEA:
 		// if this goal's branch is traced in the given path, return the
@@ -262,26 +274,39 @@ public class ControlFlowDistanceCalculator {
 		// such branches taking as value the branchExpressionValue
 
 		Set<Integer> branchTracePositions = determineBranchTracePositions(call, branch);
+		List<BranchTrace> branchTraces = call.branchTraces;
 
 		if (!branchTracePositions.isEmpty()) {
+			//logger.error("Passed through the branch, but with the incorrect value or from a non-target call");
 
 			// branch was traced in given path
 			ControlFlowDistance r = new ControlFlowDistance(0, Double.MAX_VALUE);
 
-			for (Integer branchTracePosition : branchTracePositions)
+			for (Integer branchTracePosition : branchTracePositions) {
+				BranchTrace branchTrace = branchTraces.get(branchTracePosition);
+
+				//only calls to the target method should contribute to the goal
+				if (!Properties.TARGET_METHOD.isEmpty() && !branchTrace.originMethod.equals(Properties.TARGET_METHOD)) {
+					continue;
+				}
+
 				if (value)
 					r.setBranchDistance(Math.min(r.getBranchDistance(),
-					                             trueDistances.get(branchTracePosition)));
+												branchTrace.trueDistance));
 				else
 					r.setBranchDistance(Math.min(r.getBranchDistance(),
-					                             falseDistances.get(branchTracePosition)));
+												branchTrace.falseDistance));
 
-			if (r.getBranchDistance() == Double.MAX_VALUE)
-				throw new IllegalStateException("should be impossible");
+			}
+
+			if (r.getBranchDistance() == Double.MAX_VALUE && Properties.TARGET_METHOD.isEmpty())
+					throw new IllegalStateException("should be impossible");
 
 			//			result.intermediateDistances.put(branch, r);
 			return r;
 		}
+
+		//logger.error("Didn't pass through the branch, calculating dependence distance");
 
 		ControlFlowDistance controlDependenceDistance = getControlDependenceDistancesFor(result,
 		                                                                                 call,
@@ -357,9 +382,9 @@ public class ControlFlowDistanceCalculator {
 	        Branch branch) {
 
 		Set<Integer> r = new HashSet<>();
-		List<Integer> path = call.branchTrace;
+		List<BranchTrace> path = call.branchTraces;
 		for (int pos = 0; pos < path.size(); pos++) {
-			if (path.get(pos) == branch.getActualBranchId()) { //.getActualBranchId()); {
+			if (path.get(pos).branchId == branch.getActualBranchId()) { //.getActualBranchId()); {
 				r.add(pos);
 			}
 		}
